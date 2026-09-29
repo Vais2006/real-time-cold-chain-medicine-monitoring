@@ -1,0 +1,16 @@
+apiVersion: 1
+
+datasources:
+  - name: ColdChainPostgres
+    type: postgres
+    access: proxy
+    url: cc-postgres:5432
+    database: coldchain
+    user: postgres
+    isDefault: true
+    jsonData:
+      sslmode: "disable"
+      postgresVersion: 1600
+    secureJsonData:
+      password: "postgres"
+    editable: true

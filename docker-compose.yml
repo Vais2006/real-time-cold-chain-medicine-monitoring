@@ -1,0 +1,101 @@
+services:
+  cc-zookeeper:
+    image: confluentinc/cp-zookeeper:7.6.1
+    container_name: cc-zookeeper
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+    networks:
+      - coldchain-network
+
+  cc-kafka:
+    image: confluentinc/cp-kafka:7.6.1
+    container_name: cc-kafka
+    depends_on:
+      - cc-zookeeper
+    ports:
+      - "9093:9093"
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: cc-zookeeper:2181
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://cc-kafka:29092,PLAINTEXT_HOST://localhost:9093
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+    networks:
+      - coldchain-network
+
+  cc-postgres:
+    image: postgres:16
+    container_name: cc-postgres
+    ports:
+      - "5433:5432"
+    environment:
+      POSTGRES_DB: coldchain
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    volumes:
+      - ./sql/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    networks:
+      - coldchain-network
+
+  cc-spark-master:
+    image: bitnamilegacy/spark:3.5.1
+    container_name: cc-spark-master
+    environment:
+      - SPARK_MODE=master
+      - SPARK_RPC_AUTHENTICATION_ENABLED=no
+      - SPARK_RPC_ENCRYPTION_ENABLED=no
+      - SPARK_LOCAL_STORAGE_ENCRYPTION_ENABLED=no
+      - SPARK_SSL_ENABLED=no
+    ports:
+      - "8082:8080"
+      - "7077:7077"
+    volumes:
+      - ./spark:/opt/spark:rw
+      - ./data:/opt/spark/data:rw
+    networks:
+      - coldchain-network
+
+  cc-spark-worker:
+    image: bitnamilegacy/spark:3.5.1
+    container_name: cc-spark-worker
+    environment:
+      - SPARK_MODE=worker
+      - SPARK_MASTER_URL=spark://cc-spark-master:7077
+      - SPARK_WORKER_MEMORY=1G
+      - SPARK_WORKER_CORES=2
+      - SPARK_RPC_AUTHENTICATION_ENABLED=no
+      - SPARK_RPC_ENCRYPTION_ENABLED=no
+      - SPARK_LOCAL_STORAGE_ENCRYPTION_ENABLED=no
+      - SPARK_SSL_ENABLED=no
+    ports:
+      - "8083:8081"
+    depends_on:
+      - cc-spark-master
+    volumes:
+      - ./spark:/opt/spark:rw
+      - ./data:/opt/spark/data:rw
+    networks:
+      - coldchain-network
+
+  cc-grafana:
+    image: grafana/grafana:11.2.0
+    container_name: cc-grafana
+    ports:
+      - "3001:3000"
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_USERS_ALLOW_SIGN_UP=false
+    depends_on:
+      - cc-postgres
+    volumes:
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+    networks:
+      - coldchain-network
+
+networks:
+  coldchain-network:
+    driver: bridge
